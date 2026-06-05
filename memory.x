@@ -1,0 +1,9 @@
+MEMORY
+{
+  /* STM32F407VG - 1MB Flash, 128KB SRAM */
+  FLASH : ORIGIN = 0x08000000, LENGTH = 1024K
+  RAM : ORIGIN = 0x20000000, LENGTH = 128K
+}
+
+/* Stack top - end of RAM */
+__stack_top = ORIGIN(RAM) + LENGTH(RAM);

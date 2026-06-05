@@ -1,0 +1,32 @@
+[package]
+name = "voltshark"
+version = "0.1.0"
+edition = "2021"
+authors = ["synthalorian <synthalorian@gmail.com>"]
+description = "Polyphonic synthesizer firmware for STM32/RP2040"
+license = "MIT"
+repository = "https://github.com/synthalorian/voltshark"
+
+[dependencies]
+cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
+cortex-m-rt = "0.7"
+panic-halt = "0.2"
+embedded-hal = "0.2"
+nb = "1.1"
+libm = "0.2"
+heapless = "0.8"
+
+# STM32 specific (pick one based on target)
+stm32f4xx-hal = { version = "0.20", features = ["stm32f407"] }
+
+# RP2040 specific
+# rp-pico = "0.9"
+# rp2040-hal = { version = "0.10", features = ["rt"] }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+opt-level = 3
+lto = true
+panic = "abort"
