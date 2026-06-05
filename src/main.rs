@@ -28,10 +28,6 @@ use patch::Patch;
 const SAMPLE_RATE: u32 = 48000;
 const NUM_VOICES: usize = 8;
 
-// === Sine wave test ===
-const TEST_FREQ: f32 = 440.0;
-static mut SINE_PHASE: f32 = 0.0;
-
 // === Voice array ===
 static mut VOICES: [Voice; NUM_VOICES] = [const { Voice::new() }; NUM_VOICES];
 static mut CURRENT_PATCH: Patch = Patch::init();
@@ -243,32 +239,30 @@ fn setup_i2s2(spi2: &pac::SPI2, _clocks: &stm32f4xx_hal::rcc::Clocks) {
 fn send_i2s_sample(left: i16, right: i16) {
     let spi2 = unsafe { &*pac::SPI2::ptr() };
 
-    // Wait for TX empty
+    // With 16-bit data, 16-bit channel length: each 16-bit write to DR sends one channel.
+    // Wait for TX empty and write left channel.
     while spi2.sr.read().txe().bit_is_clear() {}
+    spi2.dr.write(|w| w.dr().variant(left as u16));
 
-    // Write 32-bit frame: right << 16 | left
-    let frame = ((right as u32) << 16) | ((left as u32) & 0xFFFF);
-    spi2.dr.write(|w| w.dr().variant(frame as u16));
-
-    // For 32-bit write on some variants, we might need to write twice
-    // But stm32f4xx typically has 16-bit DR for I2S
+    // Wait for TX empty and write right channel.
+    while spi2.sr.read().txe().bit_is_clear() {}
+    spi2.dr.write(|w| w.dr().variant(right as u16));
 }
 
 // === TIM2 Audio ISR (48kHz) ===
 #[interrupt]
 fn TIM2() {
     unsafe {
-        // Generate 440Hz sine wave for verification
-        let phase_inc = TEST_FREQ / (SAMPLE_RATE as f32);
-        SINE_PHASE += phase_inc;
-        if SINE_PHASE >= 1.0 {
-            SINE_PHASE -= 1.0;
+        let mut mix: i32 = 0;
+        let voices = core::ptr::addr_of_mut!(VOICES);
+        for i in 0..NUM_VOICES {
+            let voice = &mut (*voices)[i];
+            if voice.active {
+                mix += voice.next_sample() as i32;
+            }
         }
 
-        let sample_f = libm::sinf(SINE_PHASE * 2.0 * core::f32::consts::PI);
-        let sample_i16 = (sample_f * 32767.0) as i16;
-
-        // Send stereo sample to DAC
+        let sample_i16 = mix.clamp(-32768, 32767) as i16;
         send_i2s_sample(sample_i16, sample_i16);
 
         // Clear TIM2 update flag

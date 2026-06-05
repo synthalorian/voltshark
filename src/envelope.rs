@@ -78,8 +78,8 @@ impl Envelope {
             }
             EnvelopeState::Sustain => self.adsr.sustain,
             EnvelopeState::Release => {
-                let increment = self.adsr.sustain / (self.adsr.release * self.sample_rate);
-                self.level -= increment;
+                let decrement = self.level / (self.adsr.release * self.sample_rate);
+                self.level -= decrement;
                 if self.level <= 0.0 {
                     self.level = 0.0;
                     self.state = EnvelopeState::Idle;
