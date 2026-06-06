@@ -3,7 +3,7 @@ name = "voltshark"
 version = "0.1.0"
 edition = "2021"
 authors = ["synthalorian <synthalorian@gmail.com>"]
-description = "Polyphonic synthesizer firmware for STM32/RP2040"
+description = "Polyphonic synthesizer firmware for RP2040"
 license = "MIT"
 repository = "https://github.com/synthalorian/voltshark"
 
@@ -15,13 +15,16 @@ embedded-hal = "0.2"
 nb = "1.1"
 libm = "0.2"
 heapless = "0.8"
-
-# STM32 specific (pick one based on target)
-stm32f4xx-hal = { version = "0.20", features = ["stm32f407"] }
+fugit = "0.3"
 
 # RP2040 specific
-# rp-pico = "0.9"
-# rp2040-hal = { version = "0.10", features = ["rt"] }
+rp2040-hal = { version = "0.10", features = ["rt"] }
+rp2040-boot2 = "0.3"
+pio = "0.2"
+pio-proc = "0.2"
+
+# Removed STM32 dependencies (v0.1.0 now targets RP2040)
+# stm32f4xx-hal = { version = "0.20", features = ["stm32f407"] }
 
 [profile.dev]
 panic = "abort"
