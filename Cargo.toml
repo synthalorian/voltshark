@@ -1,0 +1,42 @@
+[package]
+name = "voltshark"
+version = "0.1.0"
+edition = "2021"
+authors = ["synthalorian <synthalorian@github.com>"]
+description = "Polyphonic synthesizer firmware for STM32F4 — Rust + embedded-hal + I2S audio"
+license = "MIT"
+repository = "https://github.com/synthalorian/voltshark"
+
+[dependencies]
+# STM32 HAL
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+stm32f4xx-hal = { version = "0.21", features = ["stm32f407"] }
+panic-halt = "0.2"
+
+# Embedded traits
+embedded-hal = "1.0"
+nb = "1.1"
+
+# Audio processing
+libm = "0.2"
+micromath = "2.1"
+
+# MIDI over UART
+heapless = "0.8"
+
+[dev-dependencies]
+# Testing on host
+std = { version = "1.0", package = "std" }
+
+[[bin]]
+name = "voltshark"
+test = false
+bench = false
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+debug = false
+panic = "abort"
