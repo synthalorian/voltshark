@@ -1,6 +1,6 @@
 [package]
 name = "voltshark"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["synthalorian <synthalorian@github.com>"]
 description = "Polyphonic synthesizer firmware for STM32F4 — Rust + embedded-hal + I2S audio"
@@ -16,6 +16,7 @@ panic-halt = "0.2"
 
 # Embedded traits
 embedded-hal = "1.0"
+embedded-hal-nb = "1.0"
 nb = "1.1"
 
 # Audio processing
@@ -27,7 +28,6 @@ heapless = "0.8"
 
 [dev-dependencies]
 # Testing on host
-std = { version = "1.0", package = "std" }
 
 [[bin]]
 name = "voltshark"
