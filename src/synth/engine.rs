@@ -1,5 +1,149 @@
-use crate::synth::dsp::{ADSRState, Delay, LowPassFilter, Oscillator, Waveform, ADSR};
+use crate::synth::dsp::{Delay, LowPassFilter, Oscillator, Waveform, ADSR};
 use micromath::F32Ext;
+
+/// Patch preset defining a complete synth sound
+#[derive(Debug, Clone, Copy)]
+pub struct Patch {
+    pub name: &'static str,
+    pub osc1_waveform: Waveform,
+    pub osc2_waveform: Waveform,
+    pub osc2_detune: f32,
+    pub osc_mix: f32,
+    pub filter_cutoff: f32,
+    pub filter_resonance: f32,
+    pub filter_env_amount: f32,
+    pub attack: f32,
+    pub decay: f32,
+    pub sustain: f32,
+    pub release: f32,
+    pub filter_attack: f32,
+    pub filter_decay: f32,
+    pub filter_sustain: f32,
+    pub filter_release: f32,
+    pub lfo_rate: f32,
+    pub delay_ms: f32,
+    pub delay_feedback: f32,
+    pub delay_mix: f32,
+}
+
+impl Patch {
+    pub const BASS: Self = Self {
+        name: "Bass",
+        osc1_waveform: Waveform::Sawtooth,
+        osc2_waveform: Waveform::Square,
+        osc2_detune: 1.02,
+        osc_mix: 0.7,
+        filter_cutoff: 400.0,
+        filter_resonance: 0.4,
+        filter_env_amount: 0.8,
+        attack: 0.01,
+        decay: 0.2,
+        sustain: 0.6,
+        release: 0.3,
+        filter_attack: 0.01,
+        filter_decay: 0.3,
+        filter_sustain: 0.2,
+        filter_release: 0.3,
+        lfo_rate: 0.0,
+        delay_ms: 0.0,
+        delay_feedback: 0.0,
+        delay_mix: 0.0,
+    };
+
+    pub const LEAD: Self = Self {
+        name: "Lead",
+        osc1_waveform: Waveform::Sawtooth,
+        osc2_waveform: Waveform::Sawtooth,
+        osc2_detune: 1.01,
+        osc_mix: 0.5,
+        filter_cutoff: 3000.0,
+        filter_resonance: 0.3,
+        filter_env_amount: 0.5,
+        attack: 0.01,
+        decay: 0.4,
+        sustain: 0.8,
+        release: 0.4,
+        filter_attack: 0.01,
+        filter_decay: 0.5,
+        filter_sustain: 0.4,
+        filter_release: 0.4,
+        lfo_rate: 5.0,
+        delay_ms: 120.0,
+        delay_feedback: 0.3,
+        delay_mix: 0.2,
+    };
+
+    pub const PAD: Self = Self {
+        name: "Pad",
+        osc1_waveform: Waveform::Triangle,
+        osc2_waveform: Waveform::Sine,
+        osc2_detune: 1.005,
+        osc_mix: 0.6,
+        filter_cutoff: 800.0,
+        filter_resonance: 0.2,
+        filter_env_amount: 0.6,
+        attack: 0.5,
+        decay: 0.8,
+        sustain: 0.9,
+        release: 1.2,
+        filter_attack: 0.5,
+        filter_decay: 0.8,
+        filter_sustain: 0.5,
+        filter_release: 1.0,
+        lfo_rate: 2.0,
+        delay_ms: 200.0,
+        delay_feedback: 0.4,
+        delay_mix: 0.3,
+    };
+
+    pub const DRUM: Self = Self {
+        name: "Drum",
+        osc1_waveform: Waveform::Noise,
+        osc2_waveform: Waveform::Sine,
+        osc2_detune: 1.0,
+        osc_mix: 0.9,
+        filter_cutoff: 8000.0,
+        filter_resonance: 0.1,
+        filter_env_amount: 0.9,
+        attack: 0.001,
+        decay: 0.15,
+        sustain: 0.0,
+        release: 0.1,
+        filter_attack: 0.001,
+        filter_decay: 0.2,
+        filter_sustain: 0.0,
+        filter_release: 0.1,
+        lfo_rate: 0.0,
+        delay_ms: 50.0,
+        delay_feedback: 0.1,
+        delay_mix: 0.1,
+    };
+
+    pub const PLUCK: Self = Self {
+        name: "Pluck",
+        osc1_waveform: Waveform::Triangle,
+        osc2_waveform: Waveform::Square,
+        osc2_detune: 1.03,
+        osc_mix: 0.6,
+        filter_cutoff: 2000.0,
+        filter_resonance: 0.5,
+        filter_env_amount: 0.7,
+        attack: 0.001,
+        decay: 0.3,
+        sustain: 0.2,
+        release: 0.4,
+        filter_attack: 0.001,
+        filter_decay: 0.4,
+        filter_sustain: 0.1,
+        filter_release: 0.3,
+        lfo_rate: 0.0,
+        delay_ms: 80.0,
+        delay_feedback: 0.2,
+        delay_mix: 0.15,
+    };
+
+    pub const ALL: [Patch; 5] = [Patch::BASS, Patch::LEAD, Patch::PAD, Patch::DRUM, Patch::PLUCK];
+}
 
 /// Polyphonic voice with full synth architecture
 pub struct Voice {
@@ -37,7 +181,7 @@ pub struct Voice {
 impl Voice {
     pub fn new(sample_rate: u32) -> Self {
         let sr = sample_rate as f32;
-        let mut voice = Self {
+        Self {
             note: 0,
             velocity: 0,
             active: false,
@@ -56,16 +200,22 @@ impl Voice {
             lfo_phase: 0.0,
             lfo_rate: 5.0,
             sample_rate: sr,
-        };
+        }
+    }
 
-        voice.osc1.set_waveform(Waveform::Sawtooth);
-        voice.osc2.set_waveform(Waveform::Square);
-        voice.osc2.set_frequency(0.0); // Will be set on note on
-        voice.envelope.set_params(0.01, 0.3, 0.7, 0.5);
-        voice.filter_envelope.set_params(0.01, 0.5, 0.0, 0.3);
-        voice.delay.set_delay_ms(100.0, sample_rate);
-
-        voice
+    pub fn apply_patch(&mut self, patch: &Patch, sample_rate: u32) {
+        self.osc1.set_waveform(patch.osc1_waveform);
+        self.osc2.set_waveform(patch.osc2_waveform);
+        self.osc_mix = patch.osc_mix;
+        self.filter_cutoff_base = patch.filter_cutoff;
+        self.filter_resonance = patch.filter_resonance;
+        self.filter_env_amount = patch.filter_env_amount;
+        self.lfo_rate = patch.lfo_rate;
+        self.envelope.set_params(patch.attack, patch.decay, patch.sustain, patch.release);
+        self.filter_envelope.set_params(patch.filter_attack, patch.filter_decay, patch.filter_sustain, patch.filter_release);
+        self.delay.set_delay_ms(patch.delay_ms, sample_rate);
+        self.delay.set_feedback(patch.delay_feedback);
+        self.delay.set_mix(patch.delay_mix);
     }
 
     pub fn trigger(&mut self, note: u8, velocity: u8) {
@@ -76,7 +226,7 @@ impl Voice {
 
         let freq = Self::note_to_frequency(note);
         self.osc1.set_frequency(freq);
-        self.osc2.set_frequency(freq * 1.01); // Slight detune for thickness
+        self.osc2.set_frequency(freq * self.osc2.get_detune());
 
         self.envelope.trigger();
         self.filter_envelope.trigger();
@@ -100,7 +250,7 @@ impl Voice {
         let freq = base_freq * bend_ratio;
 
         self.osc1.set_frequency(freq);
-        self.osc2.set_frequency(freq * 1.01);
+        self.osc2.set_frequency(freq * self.osc2.get_detune());
 
         // LFO for vibrato
         self.lfo_phase += self.lfo_rate / self.sample_rate;
@@ -152,12 +302,13 @@ impl Voice {
     }
 }
 
-/// Polyphonic synthesizer engine
+/// Polyphonic synthesizer engine with patch support
 pub struct SynthEngine {
     voices: [Voice; 16],
     sample_rate: u32,
     master_volume: f32,
     pan_spread: f32,
+    current_patch_index: usize,
 
     // Global parameters
     pub cutoff: f32,
@@ -175,6 +326,7 @@ impl SynthEngine {
             sample_rate,
             master_volume: 0.8,
             pan_spread: 0.3,
+            current_patch_index: 0,
             cutoff: 2000.0,
             resonance: 0.3,
             attack: 0.01,
@@ -183,20 +335,34 @@ impl SynthEngine {
             release: 0.5,
         };
 
-        // Set initial parameters on all voices
+        // Apply default patch to all voices
+        let patch = Patch::ALL[0];
         for voice in &mut engine.voices {
-            voice.filter_cutoff_base = engine.cutoff;
-            voice.filter_resonance = engine.resonance;
-            voice
-                .envelope
-                .set_params(engine.attack, engine.decay, engine.sustain, engine.release);
+            voice.apply_patch(&patch, sample_rate);
         }
 
         engine
     }
 
+    pub fn set_patch(&mut self, index: usize) {
+        let index = index % Patch::ALL.len();
+        self.current_patch_index = index;
+        let patch = Patch::ALL[index];
+        for voice in &mut self.voices {
+            voice.apply_patch(&patch, self.sample_rate);
+        }
+    }
+
+    pub fn next_patch(&mut self) {
+        self.set_patch(self.current_patch_index + 1);
+    }
+
+    pub fn get_patch_name(&self) -> &'static str {
+        Patch::ALL[self.current_patch_index].name
+    }
+
     pub fn note_on(&mut self, _channel: u8, note: u8, velocity: u8) {
-        // Find free voice (steal oldest if none free)
+        // Find free voice (steal quietest if none free)
         let voice_index = self.find_free_voice();
         self.voices[voice_index].trigger(note, velocity);
     }
@@ -213,33 +379,40 @@ impl SynthEngine {
         let normalized = (value as f32) / 127.0;
 
         match controller {
-            1 => { // Modulation
+            1 => {
+                // Modulation
                 for voice in &mut self.voices {
                     voice.modulation = normalized;
                 }
             }
-            7 => { // Volume
+            7 => {
+                // Volume
                 self.master_volume = normalized;
             }
-            10 => { // Pan
+            10 => {
+                // Pan
                 self.pan_spread = normalized * 0.5;
             }
-            71 => { // Resonance
+            71 => {
+                // Resonance
                 self.resonance = normalized;
                 for voice in &mut self.voices {
                     voice.filter_resonance = self.resonance;
                 }
             }
-            74 => { // Cutoff
+            74 => {
+                // Cutoff
                 self.cutoff = 100.0 + normalized * 8000.0;
                 for voice in &mut self.voices {
                     voice.filter_cutoff_base = self.cutoff;
                 }
             }
-            121 => { // Reset all controllers
+            121 => {
+                // Reset all controllers
                 self.reset_controllers();
             }
-            123 => { // All notes off
+            123 => {
+                // All notes off
                 self.all_notes_off();
             }
             _ => {}
@@ -316,17 +489,17 @@ impl SynthEngine {
             }
         }
 
-        // Steal the voice with the lowest envelope value
+        // Steal the voice with the lowest envelope value (quietest = best to steal)
         let mut min_env = f32::MAX;
         let mut min_index = 0;
         for (i, voice) in self.voices.iter().enumerate() {
-            // Approximate by checking if in release stage
-            if !voice.active {
-                return i;
+            let env = voice.envelope.get_value();
+            if env < min_env {
+                min_env = env;
+                min_index = i;
             }
         }
 
-        // Fallback: steal voice 0
         min_index
     }
 

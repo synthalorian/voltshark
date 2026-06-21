@@ -1,5 +1,3 @@
-use heapless::Vec;
-
 /// MIDI event types
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MidiEvent {
@@ -48,7 +46,7 @@ pub enum MidiEvent {
 }
 
 /// MIDI parser state machine
-pub struct MidiParser {
+pub struct MidiParser<U> {
     state: ParseState,
     status: u8,
     data1: u8,
@@ -56,6 +54,7 @@ pub struct MidiParser {
     running_status: u8,
     sysex_buffer: [u8; 128],
     sysex_len: usize,
+    pub serial: U,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -66,11 +65,8 @@ enum ParseState {
     SysEx,
 }
 
-impl MidiParser {
-    pub fn new<U>(_serial: U) -> Self
-    where
-        U: embedded_hal::serial::Read<u8>,
-    {
+impl<U> MidiParser<U> {
+    pub fn new(serial: U) -> Self {
         Self {
             state: ParseState::Idle,
             status: 0,
@@ -79,6 +75,7 @@ impl MidiParser {
             running_status: 0,
             sysex_buffer: [0; 128],
             sysex_len: 0,
+            serial,
         }
     }
 
@@ -224,13 +221,15 @@ impl MidiParser {
             _ => None,
         }
     }
+}
 
+impl<U> MidiParser<U>
+where
+    U: embedded_hal_nb::serial::Read<u8>,
+{
     /// Poll for MIDI events from serial
-    pub fn poll<U>(&mut self, serial: &mut U) -> Option<MidiEvent>
-    where
-        U: embedded_hal::serial::Read<u8>,
-    {
-        match serial.read() {
+    pub fn poll(&mut self) -> Option<MidiEvent> {
+        match self.serial.read() {
             Ok(byte) => self.parse_byte(byte),
             Err(nb::Error::WouldBlock) => None,
             Err(_) => None,
@@ -242,31 +241,10 @@ impl MidiParser {
 pub mod constants {
     // Control Change numbers
     pub const CC_MODULATION: u8 = 1;
-    pub const CC_BREATH: u8 = 2;
-    pub const CC_FOOT: u8 = 4;
-    pub const CC_PORTAMENTO_TIME: u8 = 5;
-    pub const CC_DATA_ENTRY_MSB: u8 = 6;
     pub const CC_VOLUME: u8 = 7;
-    pub const CC_BALANCE: u8 = 8;
     pub const CC_PAN: u8 = 10;
-    pub const CC_EXPRESSION: u8 = 11;
-    pub const CC_SUSTAIN: u8 = 64;
-    pub const CC_PORTAMENTO: u8 = 65;
-    pub const CC_SOSTENUTO: u8 = 66;
-    pub const CC_SOFT_PEDAL: u8 = 67;
     pub const CC_RESONANCE: u8 = 71;
-    pub const CC_RELEASE_TIME: u8 = 72;
-    pub const CC_ATTACK_TIME: u8 = 73;
     pub const CC_CUTOFF: u8 = 74;
-    pub const CC_DECAY_TIME: u8 = 75;
-    pub const CC_VIBRATO_RATE: u8 = 76;
-    pub const CC_VIBRATO_DEPTH: u8 = 77;
-    pub const CC_VIBRATO_DELAY: u8 = 78;
-    pub const CC_ALL_SOUNDS_OFF: u8 = 120;
     pub const CC_RESET_ALL_CONTROLLERS: u8 = 121;
     pub const CC_ALL_NOTES_OFF: u8 = 123;
-    pub const CC_OMNI_OFF: u8 = 124;
-    pub const CC_OMNI_ON: u8 = 125;
-    pub const CC_MONO_ON: u8 = 126;
-    pub const CC_POLY_ON: u8 = 127;
 }

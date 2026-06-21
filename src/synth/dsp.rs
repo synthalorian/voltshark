@@ -33,6 +33,14 @@ impl Oscillator {
         self.phase_increment = freq / self.sample_rate;
     }
 
+    pub fn set_detune(&mut self, _detune: f32) {
+        // Detune is applied externally by multiplying frequency
+    }
+
+    pub fn get_detune(&self) -> f32 {
+        1.0
+    }
+
     pub fn set_waveform(&mut self, waveform: Waveform) {
         self.waveform = waveform;
     }
@@ -196,6 +204,10 @@ impl ADSR {
 
     pub fn is_active(&self) -> bool {
         self.state != ADSRState::Idle
+    }
+
+    pub fn get_value(&self) -> f32 {
+        self.value
     }
 }
 
