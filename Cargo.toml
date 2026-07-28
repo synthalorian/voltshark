@@ -1,38 +1,43 @@
 [package]
 name = "voltshark"
-version = "0.2.0"
+version = "1.0.0"
 edition = "2021"
 authors = ["synthalorian <synthalorian@github.com>"]
 description = "Polyphonic synthesizer firmware for STM32F4 — Rust + embedded-hal + I2S audio"
 license = "MIT"
 repository = "https://github.com/synthalorian/voltshark"
 
-[dependencies]
-# STM32 HAL
-cortex-m = "0.7"
-cortex-m-rt = "0.7"
-stm32f4xx-hal = { version = "0.21", features = ["stm32f407"] }
-panic-halt = "0.2"
+# Pure synthesis core (no_std, host-testable): MIDI parser, DSP, voice engine.
+[lib]
+name = "voltshark"
+path = "src/lib.rs"
 
-# Embedded traits
-embedded-hal = "1.0"
-embedded-hal-nb = "1.0"
-nb = "1.1"
-
-# Audio processing
-libm = "0.2"
-micromath = "2.1"
-
-# MIDI over UART
-heapless = "0.8"
-
-[dev-dependencies]
-# Testing on host
-
+# Firmware binary: hardware glue for STM32F4 (ARM Cortex-M4F only).
 [[bin]]
 name = "voltshark"
 test = false
 bench = false
+
+# Portable dependencies used by the no_std library core.
+[dependencies]
+embedded-hal-nb = "1.0"
+nb = "1.1"
+heapless = "0.8"
+
+# Audio processing (no_std math)
+libm = "0.2"
+micromath = "2.1"
+
+# Hardware dependencies: only built for ARM Cortex-M firmware targets.
+[target.'cfg(target_arch = "arm")'.dependencies]
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+stm32f4xx-hal = { version = "0.21", features = ["stm32f407"] }
+panic-halt = "0.2"
+embedded-hal = "1.0"
+
+[dev-dependencies]
+# Tests run on the host against the library crate; no extra deps needed.
 
 [profile.release]
 opt-level = 3

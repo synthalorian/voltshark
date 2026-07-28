@@ -1,0 +1,14 @@
+# NOTE: no default build target is set here on purpose.
+#
+# `cargo test` must run on the host (the pure synth core in src/lib.rs is
+# host-testable), so the host stays the default target. Embedded builds pass
+# the target explicitly:
+#
+#   cargo check  --target thumbv7em-none-eabihf
+#   cargo build  --target thumbv7em-none-eabihf --release   (see scripts/build.sh)
+#
+# Flashing via `cargo run --target thumbv7em-none-eabihf --release` uses the
+# probe-rs runner below.
+
+[target.thumbv7em-none-eabihf]
+runner = "probe-rs run --chip STM32F407VG"

@@ -1,5 +1,6 @@
 use crate::synth::dsp::{Delay, LowPassFilter, Oscillator, Waveform, ADSR};
-use micromath::F32Ext;
+#[cfg_attr(test, allow(unused_imports))] // std shadows these intrinsics in test builds
+use micromath::F32Ext; // provides f32 methods (sin, powf, ...) in no_std
 
 /// Patch preset defining a complete synth sound
 #[derive(Debug, Clone, Copy)]
@@ -166,9 +167,6 @@ pub struct Voice {
     pub filter_resonance: f32,
     pub filter_env_amount: f32,
 
-    // Effects
-    pub delay: Delay,
-
     // Modulation
     pub pitch_bend: f32,
     pub modulation: f32,
@@ -194,7 +192,6 @@ impl Voice {
             filter_cutoff_base: 2000.0,
             filter_resonance: 0.3,
             filter_env_amount: 0.5,
-            delay: Delay::new(),
             pitch_bend: 0.0,
             modulation: 0.0,
             lfo_phase: 0.0,
@@ -203,9 +200,10 @@ impl Voice {
         }
     }
 
-    pub fn apply_patch(&mut self, patch: &Patch, sample_rate: u32) {
+    pub fn apply_patch(&mut self, patch: &Patch, _sample_rate: u32) {
         self.osc1.set_waveform(patch.osc1_waveform);
         self.osc2.set_waveform(patch.osc2_waveform);
+        self.osc2.set_detune(patch.osc2_detune);
         self.osc_mix = patch.osc_mix;
         self.filter_cutoff_base = patch.filter_cutoff;
         self.filter_resonance = patch.filter_resonance;
@@ -213,9 +211,6 @@ impl Voice {
         self.lfo_rate = patch.lfo_rate;
         self.envelope.set_params(patch.attack, patch.decay, patch.sustain, patch.release);
         self.filter_envelope.set_params(patch.filter_attack, patch.filter_decay, patch.filter_sustain, patch.filter_release);
-        self.delay.set_delay_ms(patch.delay_ms, sample_rate);
-        self.delay.set_feedback(patch.delay_feedback);
-        self.delay.set_mix(patch.delay_mix);
     }
 
     pub fn trigger(&mut self, note: u8, velocity: u8) {
@@ -280,15 +275,12 @@ impl Voice {
         let velocity_scale = (self.velocity as f32) / 127.0;
         let output = filtered_sample * velocity_scale * 0.5;
 
-        // Apply delay effect
-        let delayed = self.delay.process(output);
-
         // Check if voice is done
         if !self.envelope.is_active() && env_value <= 0.001 {
             self.active = false;
         }
 
-        delayed
+        output
     }
 
     fn note_to_frequency(note: u8) -> f32 {
@@ -310,6 +302,12 @@ pub struct SynthEngine {
     pan_spread: f32,
     current_patch_index: usize,
 
+    // Global delay send effect (stereo). One shared effect rather than a
+    // per-voice buffer: 16 per-voice delay lines would need >512KB of RAM,
+    // far beyond the STM32F4's 192KB SRAM.
+    delay_left: Delay,
+    delay_right: Delay,
+
     // Global parameters
     pub cutoff: f32,
     pub resonance: f32,
@@ -327,6 +325,8 @@ impl SynthEngine {
             master_volume: 0.8,
             pan_spread: 0.3,
             current_patch_index: 0,
+            delay_left: Delay::new(),
+            delay_right: Delay::new(),
             cutoff: 2000.0,
             resonance: 0.3,
             attack: 0.01,
@@ -340,8 +340,18 @@ impl SynthEngine {
         for voice in &mut engine.voices {
             voice.apply_patch(&patch, sample_rate);
         }
+        engine.apply_patch_delay(&patch);
 
         engine
+    }
+
+    fn apply_patch_delay(&mut self, patch: &Patch) {
+        self.delay_left.set_delay_ms(patch.delay_ms, self.sample_rate);
+        self.delay_right.set_delay_ms(patch.delay_ms, self.sample_rate);
+        self.delay_left.set_feedback(patch.delay_feedback);
+        self.delay_right.set_feedback(patch.delay_feedback);
+        self.delay_left.set_mix(patch.delay_mix);
+        self.delay_right.set_mix(patch.delay_mix);
     }
 
     pub fn set_patch(&mut self, index: usize) {
@@ -351,6 +361,7 @@ impl SynthEngine {
         for voice in &mut self.voices {
             voice.apply_patch(&patch, self.sample_rate);
         }
+        self.apply_patch_delay(&patch);
     }
 
     pub fn next_patch(&mut self) {
@@ -478,6 +489,10 @@ impl SynthEngine {
         left = Self::soft_limit(left * master);
         right = Self::soft_limit(right * master);
 
+        // Global stereo delay send effect
+        left = self.delay_left.process(left);
+        right = self.delay_right.process(right);
+
         (left, right)
     }
 
@@ -511,6 +526,292 @@ impl SynthEngine {
             -1.0 + (1.0 / (-sample + 1.0))
         } else {
             sample
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SR: u32 = 48_000;
+
+    fn engine() -> SynthEngine {
+        SynthEngine::new(SR)
+    }
+
+    #[test]
+    fn note_on_assigns_free_voice() {
+        let mut e = engine();
+        e.note_on(0, 60, 100);
+        assert!(e.voices[0].active);
+        assert_eq!(e.voices[0].note, 60);
+        assert_eq!(e.voices[0].velocity, 100);
+        // All other voices untouched.
+        assert!(e.voices[1..].iter().all(|v| !v.active));
+    }
+
+    #[test]
+    fn voice_stealing_at_16_voice_limit() {
+        let mut e = engine();
+        for i in 0..16u8 {
+            e.note_on(0, 40 + i, 100);
+        }
+        assert!(e.voices.iter().all(|v| v.active));
+
+        // 17th note must steal a voice (all envelopes still at 0, so the
+        // quietest-voice search steals the first one).
+        e.note_on(0, 90, 100);
+        assert_eq!(
+            e.voices.iter().filter(|v| v.active).count(),
+            16,
+            "more than 16 voices active after stealing"
+        );
+        assert!(
+            e.voices.iter().any(|v| v.note == 90),
+            "new note not assigned after steal"
+        );
+        assert!(
+            !e.voices.iter().any(|v| v.note == 40),
+            "stolen voice still holds its old note"
+        );
+    }
+
+    #[test]
+    fn note_off_releases_the_right_voice() {
+        let mut e = engine();
+        e.note_on(0, 60, 100);
+        e.note_on(0, 67, 100);
+        e.note_off(0, 60);
+
+        // Default patch release is 0.3s; render well past that.
+        for _ in 0..SR as usize {
+            e.render();
+        }
+
+        let released = e.voices.iter().find(|v| v.note == 60).unwrap();
+        let held = e.voices.iter().find(|v| v.note == 67).unwrap();
+        assert!(!released.active, "released voice never went inactive");
+        assert!(held.active, "held voice was wrongly released");
+    }
+
+    #[test]
+    fn per_voice_adsr_independence() {
+        let mut e = engine();
+        e.note_on(0, 60, 100);
+        e.note_on(0, 64, 100);
+        // Let both envelopes get into their cycle.
+        for _ in 0..2000 {
+            e.render();
+        }
+        e.note_off(0, 60);
+
+        // Shortly after the note-off, the released voice's envelope must be
+        // falling while the held voice keeps sounding.
+        let mut released_peak = 0.0_f32;
+        let mut held_sum = 0.0_f32;
+        for _ in 0..2000 {
+            e.render();
+            let rel = e.voices.iter().find(|v| v.note == 60).unwrap();
+            let held = e.voices.iter().find(|v| v.note == 64).unwrap();
+            released_peak = released_peak.max(rel.envelope.get_value());
+            held_sum += held.envelope.get_value();
+        }
+        let rel = e.voices.iter().find(|v| v.note == 60).unwrap();
+        let held = e.voices.iter().find(|v| v.note == 64).unwrap();
+        assert!(
+            rel.envelope.get_value() < held.envelope.get_value(),
+            "released envelope ({}) not below held envelope ({})",
+            rel.envelope.get_value(),
+            held.envelope.get_value()
+        );
+        assert!(held_sum > 0.0, "held voice envelope silent");
+        let _ = released_peak;
+    }
+
+    #[test]
+    fn cc74_changes_cutoff() {
+        let mut e = engine();
+        e.control_change(0, 74, 127);
+        assert!((e.cutoff - 8100.0).abs() < 1e-3);
+        assert!(e.voices.iter().all(|v| (v.filter_cutoff_base - 8100.0).abs() < 1e-3));
+
+        e.control_change(0, 74, 0);
+        assert!((e.cutoff - 100.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn cc71_changes_resonance() {
+        let mut e = engine();
+        e.control_change(0, 71, 64);
+        let expected = 64.0 / 127.0;
+        assert!((e.resonance - expected).abs() < 1e-6);
+        assert!(e
+            .voices
+            .iter()
+            .all(|v| (v.filter_resonance - expected).abs() < 1e-6));
+    }
+
+    #[test]
+    fn cc71_max_resonance_does_not_blow_up_render() {
+        // Regression: CC 71 = 127 used to drive filter resonance to exactly
+        // 1.0, producing NaN coefficients and killing all audio permanently.
+        let mut e = engine();
+        e.control_change(0, 71, 127);
+        e.note_on(0, 60, 127);
+        for i in 0..10_000 {
+            let (l, r) = e.render();
+            assert!(l.is_finite() && r.is_finite(), "non-finite render at {}", i);
+        }
+    }
+
+    #[test]
+    fn cc7_controls_master_volume() {
+        let mut e = engine();
+        e.control_change(0, 7, 0);
+        e.note_on(0, 60, 127);
+        let mut peak = 0.0_f32;
+        for _ in 0..4000 {
+            let (l, r) = e.render();
+            peak = peak.max(l.abs()).max(r.abs());
+        }
+        assert_eq!(peak, 0.0, "volume 0 should silence output, got {}", peak);
+    }
+
+    #[test]
+    fn cc1_sets_modulation_and_cc10_sets_pan() {
+        let mut e = engine();
+        e.control_change(0, 1, 127);
+        assert!(e.voices.iter().all(|v| (v.modulation - 1.0).abs() < 1e-6));
+        e.control_change(0, 10, 127);
+        assert!((e.pan_spread - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn pitch_bend_range_maps_to_plus_minus_one() {
+        let mut e = engine();
+        e.pitch_bend(0, -8192);
+        assert!(e.voices.iter().all(|v| (v.pitch_bend - -1.0).abs() < 1e-6));
+        e.pitch_bend(0, 8191);
+        assert!(e
+            .voices
+            .iter()
+            .all(|v| (v.pitch_bend - 8191.0 / 8192.0).abs() < 1e-6));
+        e.pitch_bend(0, 0);
+        assert!(e.voices.iter().all(|v| v.pitch_bend == 0.0));
+    }
+
+    #[test]
+    fn pitch_bend_actually_shifts_rendered_frequency() {
+        // Bend fully up (+2 semitones): the rendered waveform must complete
+        // more cycles than the unbent one over the same window.
+        let cycles = |bend: i16| {
+            let mut e = engine();
+            e.set_patch(0); // Bass, no LFO
+            e.note_on(0, 69, 127); // A4 = 440 Hz
+            e.pitch_bend(0, bend);
+            let mut crossings = 0u32;
+            let mut prev = 0.0_f32;
+            for _ in 0..SR as usize / 10 {
+                let (l, _) = e.render();
+                if prev <= 0.0 && l > 0.0 {
+                    crossings += 1;
+                }
+                prev = l;
+            }
+            crossings
+        };
+        let flat = cycles(0);
+        let up = cycles(8191);
+        // +2 semitones = ratio 2^(2/12) ~= 1.1225 -> expect ~12% more cycles.
+        assert!(
+            up > flat + flat / 10,
+            "bend up did not raise pitch: flat={}, up={}",
+            flat,
+            up
+        );
+    }
+
+    #[test]
+    fn dual_oscillator_detune_produces_chorus() {
+        // Patches detune osc2 (e.g. Bass = 1.02). A single-oscillator render
+        // would be periodic; the detuned pair must beat/diverge. Compare
+        // against an engine whose osc2 detune we force back to unison.
+        let render_energy_diff = |detune2: f32| {
+            let mut e = engine();
+            e.set_patch(0);
+            for v in &mut e.voices {
+                v.osc2.set_detune(detune2);
+            }
+            e.note_on(0, 50, 127);
+            let mut out = [0.0_f32; 4096];
+            for (i, s) in out.iter_mut().enumerate() {
+                let _ = i;
+                let (l, _) = e.render();
+                *s = l;
+            }
+            out
+        };
+        let detuned = render_energy_diff(1.02);
+        let unison = render_energy_diff(1.0);
+        let diff: f32 = detuned
+            .iter()
+            .zip(unison.iter())
+            .map(|(a, b)| (a - b).abs())
+            .sum();
+        assert!(
+            diff > 10.0,
+            "detuned osc2 made no audible difference (sum diff {})",
+            diff
+        );
+    }
+
+    #[test]
+    fn patch_switching() {
+        let mut e = engine();
+        assert_eq!(e.get_patch_name(), "Bass");
+        e.set_patch(3);
+        assert_eq!(e.get_patch_name(), "Drum");
+        e.next_patch();
+        assert_eq!(e.get_patch_name(), "Pluck");
+        e.set_patch(99); // wraps
+        assert_eq!(e.get_patch_name(), "Pluck");
+    }
+
+    #[test]
+    fn all_notes_off_and_reset_controllers() {
+        let mut e = engine();
+        e.note_on(0, 60, 100);
+        e.note_on(0, 64, 100);
+        e.all_notes_off();
+        for _ in 0..SR as usize {
+            e.render();
+        }
+        assert!(e.voices.iter().all(|v| !v.active));
+
+        e.control_change(0, 74, 127);
+        e.control_change(0, 71, 100);
+        e.reset_controllers();
+        assert!((e.cutoff - 2000.0).abs() < 1e-3);
+        assert!((e.resonance - 0.3).abs() < 1e-6);
+    }
+
+    #[test]
+    fn render_output_is_finite_and_bounded() {
+        let mut e = engine();
+        // Slam all 16 voices at max velocity.
+        for i in 0..16u8 {
+            e.note_on(0, 48 + i, 127);
+        }
+        for i in 0..10_000 {
+            let (l, r) = e.render();
+            assert!(l.is_finite() && r.is_finite(), "non-finite sample at {}", i);
+            assert!(
+                l.abs() <= 1.0 && r.abs() <= 1.0,
+                "soft limiter exceeded: ({}, {})",
+                l,
+                r
+            );
         }
     }
 }

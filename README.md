@@ -64,6 +64,16 @@ voltshark/
     └── build.sh          # Build helper
 ```
 
+## Testing
+
+The pure synthesis engine (DSP, voice management) and MIDI parser run host-side tests — no hardware required:
+
+```sh
+cargo test          # 41 tests: oscillators, ADSR, filter stability, delay, voice allocation/stealing, MIDI parsing
+```
+
+The library (`src/lib.rs`) is `no_std`; hardware glue lives in `src/main.rs`.
+
 ## MIDI Implementation
 
 - **Note On/Off**: Standard MIDI note messages
