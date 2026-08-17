@@ -1,4 +1,4 @@
-# Voltshark ⚡🦈
+# Voltshark ⚡🦞
 
 Polyphonic synthesizer firmware for STM32F4. Rust + embedded-hal + I2S audio.
 
@@ -84,3 +84,11 @@ The library (`src/lib.rs`) is `no_std`; hardware glue lives in `src/main.rs`.
 ## License
 
 MIT
+
+---
+
+## ☕ Support the Developer
+
+If this project saved you time, solved a problem, or just made your day a little more neon, you can fuel the next one:
+
+[![Buy Me A Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/synthalorian)
