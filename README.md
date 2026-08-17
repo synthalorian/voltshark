@@ -55,7 +55,7 @@ voltshark/
 │   │   └── i2s.rs        # I2S audio engine
 │   ├── midi/
 │   │   └── parser.rs     # MIDI message parser
-│   └── synthalorian 🎹🤺/
+│   └── synth/
 │       ├── dsp.rs        # Oscillators, filters, effects
 │       └── engine.rs     # Polyphonic voice management
 ├── memory/
