@@ -2,7 +2,7 @@
 name = "voltshark"
 version = "1.0.0"
 edition = "2021"
-authors = ["synthalorian <synthalorian@github.com>"]
+authors = ["synth <synthalorian@github.com>"]
 description = "Polyphonic synthesizer firmware for STM32F4 — Rust + embedded-hal + I2S audio"
 license = "MIT"
 repository = "https://github.com/synthalorian/voltshark"
