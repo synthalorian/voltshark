@@ -1,3 +1,5 @@
+![voltshark](.github/preview.png)
+
 # Voltshark ⚡🦞
 
 Polyphonic synthesizer firmware for STM32F4. Rust + embedded-hal + I2S audio.
