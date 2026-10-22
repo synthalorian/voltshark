@@ -85,7 +85,7 @@ The library (`src/lib.rs`) is `no_std`; hardware glue lives in `src/main.rs`.
 
 ## License
 
-MIT
+Apache-2.0, see [LICENSE](LICENSE).
 
 ---
 
