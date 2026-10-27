@@ -33,7 +33,7 @@ micromath = "2.1"
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
 stm32f4xx-hal = { version = "0.21", features = ["stm32f407"] }
-panic-halt = "0.2"
+panic-halt = "1.0"
 embedded-hal = "1.0"
 
 [dev-dependencies]
