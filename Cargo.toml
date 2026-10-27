@@ -22,7 +22,7 @@ bench = false
 [dependencies]
 embedded-hal-nb = "1.0"
 nb = "1.1"
-heapless = "0.8"
+heapless = "0.9"
 
 # Audio processing (no_std math)
 libm = "0.2"
